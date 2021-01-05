@@ -49,7 +49,6 @@ def get_data(train_batch_size):
     
     train_loader = DataLoader(datasets.FashionMNIST(root=data_root, train=True, transform=data_transform, target_transform=None, download=True),
                               batch_size=train_batch_size, shuffle=True)
-    
     return train_loader
 global_step = tf.contrib.framework
 # Global constants
@@ -67,6 +66,7 @@ img_size = [28,28,1]
 img_size2 = (28,28)
 trained_model_path = 'trained_models/sargan_fmnist'
 BATCH_SIZE = 64
+batch_size2=eval_batch_size
 NOISE_STD_RANGE = [0.1, 0.3]
 
 if eval_on_cpu:
@@ -99,7 +99,11 @@ last_checkpoint_filename = ''
 already_seen_state = False
 saver = tf.train.Saver()
 #summary_writer = tf.summary.FileWriter(eval_dir)
-
+def cycle(iterable):
+    while True:
+        for x in iterable:
+            yield x
+# A function for evaluating a single checkpoint
 # A function for evaluating a single checkpoint
 def evaluate_checkpoint(filename):
     #sys.stdout = open(os.devnull, 'w')
@@ -112,11 +116,11 @@ def evaluate_checkpoint(filename):
     
         # Iterate over the samples batch-by-batch
         num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
+        num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
         total_xent_nat = 0.
         total_xent_adv = 0.
         total_corr_nat = 0
         total_corr_adv = 0        
-        corruptedbatch_list=[];
         x_batch_list=[]
         y_batch_list=[]
         x_adv_list=[]
@@ -126,14 +130,13 @@ def evaluate_checkpoint(filename):
                 
             x_batch, y_batch = next(trainiter)
             x_batch=np.array(x_batch).reshape([BATCH_SIZE,img_size[0]*img_size[1]])
-            x_batch_list.append(x_batch)
             y_batch_list.append(y_batch)
                 
             
             x_batch_adv = attack.perturb(x_batch, y_batch, sess)
+            x_batch_list.append(x_batch_adv)
             corruptedbatch =blur(x_batch_adv)
-            corruptedbatch_list.append(corruptedbatch)
-        sess.close()
+            x_adv_list.append(corruptedbatch)
       
       
     with g2.as_default():
@@ -143,25 +146,9 @@ def evaluate_checkpoint(filename):
             sargan_saver = tf.train.import_meta_graph(trained_model_path+'/sargan_mnist.meta');
             sargan_saver.restore(sess2,tf.train.latest_checkpoint(trained_model_path));
             for ibatch in range(num_batches):
-                cbatch=np.zeros([BATCH_SIZE,img_size[0],img_size[1],img_size[2]])
-                outbatch=np.zeros([len(corruptedbatch_list[ibatch]),img_size2[0],img_size2[1]])
-                outbatch1=np.zeros([len(corruptedbatch_list[ibatch]),img_size[0],img_size[1]])
-                j=0
-                k=0
-                for i in range(len(corruptedbatch_list[ibatch])):
-                    j+=1
-                    cbatch[int(i%BATCH_SIZE)]=corruptedbatch_list[ibatch][i]
-                    if((j%BATCH_SIZE==0) or ((i+1)%len(corruptedbatch_list[ibatch])==0)):
-                        processed_batch=sess2.run(sargan_model.gen_img,feed_dict={sargan_model.image: cbatch, sargan_model.cond: cbatch})
-                        for l in range(j):
-                            outbatch1[k]=processed_batch[l,:,:,0]
-                            k+=1
-                        j=0
-                        transform2=Resize([img_size2[0],img_size2[1]])
-                        outbatch=np.array(transform2(torch.from_numpy(outbatch1)))
-                        x_batch_adv=outbatch.reshape([len(corruptedbatch_list[ibatch]),784])
-                        x_adv_list.append(x_batch_adv)
-            sess2.close()
+                processed_batch=sess2.run(sargan_model.gen_img,feed_dict={sargan_model.image: x_adv_list[ibatch], sargan_model.cond: x_adv_list[ibatch]})
+                processed_batch=np.array(processed_batch).reshape([len(processed_batch),img_size[0]*img_size[1]])
+                x_adv_list[ibatch]=processed_batch
     with g3.as_default():
         model3 = Model()
         saver2 = tf.train.Saver()

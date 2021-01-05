@@ -31,6 +31,8 @@ from torchvision.transforms import Compose, ToTensor, Normalize, Resize
 import torch
 data_root='sar_data/MNIST'
 
+
+from PIL import Image
 def blur(batch):
     #sargan model
     #reshaping the images to a square
@@ -38,7 +40,9 @@ def blur(batch):
     #upping the size of the image#corrupting
     corruptedbatch=np.zeros([len(newbatch),img_size[0],img_size[1],img_size[2]])
     for i in range(len(newbatch)):
-        corruptedbatch[i]=gaussian_filter(np.array([add_gaussian_noise(newbatch[i], sd=np.random.uniform(NOISE_STD_RANGE[0], NOISE_STD_RANGE[1]))]), sigma=2)[0]
+        corruptedbatch[i]=gaussian_filter(np.array([add_gaussian_noise(newbatch[i]/1.5, sd=np.random.uniform(NOISE_STD_RANGE[0], NOISE_STD_RANGE[1]))]), sigma=1)[0]
+    corruptedbatch = np.array([add_gaussian_noise(image, sd=np.random.uniform(NOISE_STD_RANGE[0], NOISE_STD_RANGE[1]/2)) for image in corruptedbatch])
+
     return corruptedbatch
 
 def get_data(train_batch_size):
@@ -59,15 +63,15 @@ num_eval_examples = config['num_eval_examples']
 eval_batch_size = config['eval_batch_size']
 eval_on_cpu = config['eval_on_cpu']
 
-model_dir = config['model_dir']
+model_dir = config['model_dir-n']
 # Set upd the data, hyperparameters, and the model
 
 
 img_size = [28,28,1]
 img_size2 = (28,28)
-trained_model_path = 'trained_models/sargan_mnist'
+trained_model_path = 'trained_models/sargan_mnistd2'
 BATCH_SIZE = 64
-NOISE_STD_RANGE = [0.1, 0.3]
+NOISE_STD_RANGE = [0.0, 0.3]
 
 if eval_on_cpu:
   with tf.device("/cpu:0"):
@@ -120,6 +124,7 @@ def evaluate_checkpoint(filename):
         x_batch_list=[]
         y_batch_list=[]
         x_adv_list=[]
+        otherlist=[]
         for ibatch in range(num_batches):
             train_loader= get_data(BATCH_SIZE)
             trainiter = iter(train_loader)
@@ -128,7 +133,7 @@ def evaluate_checkpoint(filename):
             x_batch=np.array(x_batch).reshape([BATCH_SIZE,img_size[0]*img_size[1]])
             y_batch_list.append(y_batch)
                 
-            
+            otherlist.append(x_batch)
             x_batch_adv = attack.perturb(x_batch, y_batch, sess)
             x_batch_list.append(x_batch_adv)
             corruptedbatch =blur(x_batch_adv)

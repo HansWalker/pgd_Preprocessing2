@@ -43,11 +43,11 @@ plt.switch_backend('agg')
 #test_filename = "test_batch"
 
 
-def get_fmnist_data(train_batch_size, val_batch_size):
+def get_data_loader(train_batch_size, val_batch_size):
     
     mnist = datasets.FashionMNIST(root=data_root, train=True, transform=torchvision.transforms.ToTensor(), target_transform=None, download=True).data.float()
     
-    data_transform = Compose([ Resize((img_size[0], img_size[1])),ToTensor(), Normalize((mnist.mean()/255,), (mnist.std()/255,))])
+    data_transform = Compose([ToTensor()])
     
     
     train_loader = DataLoader(datasets.FashionMNIST(root=data_root, train=True, transform=data_transform, target_transform=None, download=True),
@@ -84,7 +84,7 @@ def main(args):
         #copies = imgs.astype('float32')
         #test_copies = test_imgs.astype('float32')
         for epoch in progress_bar:
-            train_loader, val_loader = get_fmnist_data(BATCH_SIZE, BATCH_SIZE)
+            train_loader, val_loader = get_data_loader(BATCH_SIZE, BATCH_SIZE)
             counter = 0
             epoch_start_time = time.time()
             #shuffle(copies)
@@ -99,7 +99,7 @@ def main(args):
                 #copy the batch
                 features_copy = features.copy()
                 #corrupt the images
-                corrupted_batch = np.array([add_gaussian_noise(image, sd=np.random.uniform(NOISE_STD_RANGE[1], NOISE_STD_RANGE[1])) for image in features_copy])
+                corrupted_batch = np.array([add_gaussian_noise(image, sd=np.random.uniform(NOISE_STD_RANGE[0], NOISE_STD_RANGE[1])) for image in features_copy])
                 for i in range(len(corrupted_batch)):
                     corrupted_batch[i]=gaussian_filter(corrupted_batch[i], sigma=2)
                 _, m = sess.run([d_opt, model.d_loss], feed_dict={model.image:features, model.cond:corrupted_batch})

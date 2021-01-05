@@ -12,7 +12,10 @@ from timeit import default_timer as timer
 
 import tensorflow as tf
 import numpy as np
-from tensorflow.examples.tutorials.mnist import input_data
+from torchvision import transforms, datasets, models
+from torchvision.transforms import Compose, ToTensor, Normalize, Resize
+import torchvision
+from torch.utils.data import DataLoader
 
 from pgd.mnist.model import Model
 from pgd.mnist.pgd_attack import LinfPGDAttack
@@ -31,7 +34,22 @@ num_checkpoint_steps = config['num_checkpoint_steps']
 batch_size = config['training_batch_size']
 
 # Setting up the data and the model
-mnist = input_data.read_data_sets('MNIST_data', one_hot=False)
+data_root='sar_data/MNIST'
+img_size = [28,28,1]
+def cycle(iterable):
+    while True:
+        for x in iterable:
+            yield x
+def get_fmnist_data(train_batch_size):
+    
+    mnist = datasets.MNIST(root=data_root, train=True, transform=torchvision.transforms.ToTensor(), target_transform=None, download=True).data.float()
+    
+    data_transform = Compose([ToTensor()])
+    
+    train_loader = DataLoader(datasets.MNIST(root=data_root, train=True, transform=data_transform, target_transform=None, download=True),
+                              batch_size=train_batch_size, shuffle=True)
+    
+    return train_loader
 global_step = tf.contrib.framework.get_or_create_global_step()
 model = Model()
 
@@ -68,15 +86,21 @@ merged_summaries = tf.summary.merge_all()
 
 shutil.copy('pgd/mnist/config.json', model_dir)
 
+
 with tf.Session() as sess:
   # Initialize the summary writer, global variables, and our time counter.
+  #saver.restore(sess,tf.train.latest_checkpoint(model_dir))
   summary_writer = tf.summary.FileWriter(model_dir, sess.graph)
   sess.run(tf.global_variables_initializer())
   training_time = 0.0
-
+  train_loader= get_fmnist_data(batch_size)
+  trainiter = iter(cycle(train_loader))
   # Main training loop
   for ii in range(max_num_training_steps):
-    x_batch, y_batch = mnist.train.next_batch(batch_size)
+    x_batch, y_batch = next(trainiter)
+    y_batch=np.array(y_batch,dtype='uint8')
+    x_batch=np.array(x_batch,dtype='float32').reshape(batch_size,img_size[0]*img_size[1])
+    #x_batch = x_batch.data.numpy().transpose(0,2,3,1)
 
     # Compute Adversarial Perturbations
     start = timer()
@@ -102,9 +126,9 @@ with tf.Session() as sess:
             num_output_steps * batch_size / training_time))
         training_time = 0.0
     # Tensorboard summaries
-    if ii % num_summary_steps == 0:
-      summary = sess.run(merged_summaries, feed_dict=adv_dict)
-      summary_writer.add_summary(summary, global_step.eval(sess))
+    #if ii % num_summary_steps == 0:
+      #summary = sess.run(merged_summaries, feed_dict=adv_dict)
+      #summary_writer.add_summary(summary, global_step.eval(sess))
 
     # Write a checkpoint
     if ii % num_checkpoint_steps == 0:

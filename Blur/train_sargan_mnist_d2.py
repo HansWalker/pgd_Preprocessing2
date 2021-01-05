@@ -21,18 +21,18 @@ import torchvision
 from torchvision.transforms import Compose, ToTensor, Normalize, Resize
 from scipy.ndimage.filters import gaussian_filter
 
-img_size = [32,32*3,1]
-experiment_name = '/sargan_cifar100'
+img_size = [28,28,1]
+experiment_name = '/sargan_mnist'
 output_dir = 'outputs'
-trained_model_path = 'trained_models/sargan_cifar100'
-data_root='sar_data/cifar100'
+trained_model_path = 'trained_models/sargan_mnistd2'
 output_path = output_dir+experiment_name
+data_root='sar_data/MNIST'
 NUM_ITERATION = 85
 BATCH_SIZE = 64
 GPU_ID = 1
 MAX_EPOCH = 55
 LEARNING_RATE = 0.001
-NOISE_STD_RANGE = [0.1, 0.3]
+NOISE_STD_RANGE = [0.0, 0.3]
 SAVE_EVERY_EPOCH = 5
 plt.switch_backend('agg')
 
@@ -43,13 +43,16 @@ plt.switch_backend('agg')
 
 def get_data_loader(train_batch_size, val_batch_size):
     
-    mnist = datasets.CIFAR100(root=data_root, train=True, transform=torchvision.transforms.ToTensor(), target_transform=None, download=True)#.data.float()
+    mnist = datasets.MNIST(root=data_root, train=True, transform=torchvision.transforms.ToTensor(), target_transform=None, download=True).data.float()
     data_transform = Compose([ToTensor()])
     
-    train_loader = DataLoader(datasets.CIFAR100(root=data_root, train=True, transform=data_transform, target_transform=None, download=True),
+    train_loader = DataLoader(datasets.MNIST(root=data_root, train=True, transform=data_transform, target_transform=None, download=True),
                               batch_size=train_batch_size, shuffle=True)
-    val_loader = DataLoader(datasets.CIFAR100(root=data_root, train=False, transform=data_transform, target_transform=None, download=True),
+    
+    
+    val_loader = DataLoader(datasets.MNIST(root=data_root, train=False, transform=data_transform, target_transform=None, download=True),
                             batch_size=val_batch_size, shuffle=False)
+    
     return train_loader, val_loader
 
 
@@ -57,7 +60,7 @@ def get_data_loader(train_batch_size, val_batch_size):
 
 def main(args):
     image_number=0;
-    model = SARGAN(img_size, BATCH_SIZE, img_channel=img_size[2])
+    model = SARGAN(img_size, BATCH_SIZE, img_channel=1)
     with tf.variable_scope("d_opt",reuse=tf.AUTO_REUSE):
         d_opt = tf.train.AdamOptimizer(learning_rate=LEARNING_RATE).minimize(model.d_loss, var_list=model.d_vars)
     with tf.variable_scope("g_opt",reuse=tf.AUTO_REUSE):
@@ -93,13 +96,13 @@ def main(args):
                 #one_batch_of_imgs = image_batches[i]
                 features, labels = next(trainiter)
                 features = features.data.numpy().transpose(0,2,3,1)
-                features=features.reshape([BATCH_SIZE,img_size[0],img_size[1],img_size[2]])
                 #copy the batch
                 features_copy = features.copy()
                 #corrupt the images
-                corrupted_batch = np.array([add_gaussian_noise(image, sd=np.random.uniform(NOISE_STD_RANGE[1], NOISE_STD_RANGE[1])) for image in features_copy])
+                corrupted_batch = np.array([add_gaussian_noise(image/1.5, sd=np.random.uniform(NOISE_STD_RANGE[0], NOISE_STD_RANGE[1])) for image in features_copy])
                 for i in range(len(corrupted_batch)):
-                    corrupted_batch[i]=gaussian_filter(corrupted_batch[i], sigma=2)
+                    corrupted_batch[i]=gaussian_filter(corrupted_batch[i], sigma=1)
+                corrupted_batch = np.array([add_gaussian_noise(image, sd=np.random.uniform(NOISE_STD_RANGE[0], NOISE_STD_RANGE[1]/2)) for image in corrupted_batch])
                 _, m = sess.run([d_opt, model.d_loss], feed_dict={model.image:features, model.cond:corrupted_batch})
                 _, M = sess.run([g_opt, model.g_loss], feed_dict={model.image:features, model.cond:corrupted_batch})
                 train_d_loss_values.append(m)
@@ -130,16 +133,14 @@ def main(args):
                 features, labels = next(testiter)
                 features = features.data.numpy()
                 features = features.transpose(0,2,3,1)
-                features =features.reshape([BATCH_SIZE,img_size[0],img_size[1],img_size[2]])
                 batch_copy = features.copy()
                 #corrupt the images
-                corrupted_batch = np.array([add_gaussian_noise(image, sd=np.random.uniform(NOISE_STD_RANGE[0], NOISE_STD_RANGE[1])) for image in batch_copy])
+                corrupted_batch = np.array([add_gaussian_noise(image/1.5, sd=np.random.uniform(NOISE_STD_RANGE[0], NOISE_STD_RANGE[1])) for image in batch_copy])
                 for i in range(len(corrupted_batch)):
-                    corrupted_batch[i]=gaussian_filter(corrupted_batch[i], sigma=2)
-
+                    corrupted_batch[i]=gaussian_filter(corrupted_batch[i], sigma=1)
+                corrupted_batch = np.array([add_gaussian_noise(image, sd=np.random.uniform(NOISE_STD_RANGE[0], NOISE_STD_RANGE[1]/2)) for image in corrupted_batch])
 
                 gen_imgs = sess.run(model.gen_img, feed_dict={model.image:features, model.cond:corrupted_batch})
-                print(features.shape, gen_imgs.shape)
                 #if j %17 == 0: # only save 3 images 0, 17, 34
                 list_images.append((features[0], corrupted_batch[0], gen_imgs[0]))
                 list_images.append((features[17], corrupted_batch[17], gen_imgs[17]))                
@@ -147,7 +148,7 @@ def main(args):
                 for i in range(len(gen_imgs)):
                     current_img = features[i]
                     recovered_img = gen_imgs[i]
-                    sum_psnr += ski_me.compare_psnr(current_img, recovered_img, 1)
+                    sum_psnr += ski_me.compare_psnr(current_img, recovered_img, 2)
                 #psnr_value = ski_mem.compare_psnr(test_img, gen_img, 1)
                 #sum_psnr += psnr_value
             average_psnr = sum_psnr / 50
@@ -156,8 +157,8 @@ def main(args):
             ############### SEND EMAIL ##############
             rows = 1
             cols = 3
-            display_mean = np.array([0.485, 0.456, 0.406])
-            display_std = np.array([0.229, 0.224, 0.225])
+            display_mean = np.array([0, 0, 0])
+            display_std = np.array([1, 1, 1])
             if epoch % SAVE_EVERY_EPOCH == 0: 
                 #image = std * image + mean
                 imgs_1 = list_images[0]
@@ -211,6 +212,30 @@ def main(args):
                 sample_test_file_3 = os.path.join(output_path, 'image_%d_3.jpg' % image_number)
                 image_number+=1
                 plt.savefig(sample_test_file_3, dpi=300)
+ 
+
+            '''attachments = [sample_test_file_1, sample_test_file_2, sample_test_file_3]
+
+            email_alert_subject = "Epoch %s %s SARGAN" % (epoch+1, experiment_name.upper())
+            
+            email_alert_text = """
+            Epoch [{}/{}]
+            EXPERIMENT PARAMETERS:
+                        Learning rate: {}
+                        Batch size: {}
+                        Max epoch number: {}
+                        Training iterations each epoch: {}
+                        noise standard deviation: {}
+                        Running time: {:.2f} [s]
+            AVERAGE PSNR VALUE ON 50 TEST IMAGES: {}
+            """.format(epoch + 1, MAX_EPOCH, LEARNING_RATE, BATCH_SIZE, MAX_EPOCH, 
+                      NUM_ITERATION, ((NOISE_STD_RANGE[0] + NOISE_STD_RANGE[1])/2), epoch_running_time, average_psnr)
+            if epoch % SAVE_EVERY_EPOCH == 0: 
+                send_images_via_email(email_alert_subject,
+                 email_alert_text,
+                 attachments,
+                 sender_email="hbwalker007@gmail.com", 
+                 recipient_emails=["hans21@bu.edu"])'''
             plt.close("all")            
         
 if __name__ == '__main__':

@@ -41,7 +41,7 @@ plt.switch_backend('agg')
 ####
 
 
-def get_mnist_data(train_batch_size, val_batch_size):
+def get_data_loader(train_batch_size, val_batch_size):
     
     mnist = datasets.CIFAR10(root=data_root, train=True, transform=torchvision.transforms.ToTensor(), target_transform=None, download=True)#.data.float()
     #mnist=torch.load(data_root+'/MNIST_data')
@@ -92,7 +92,7 @@ def main(args):
         #copies = imgs.astype('float32')
         #test_copies = test_imgs.astype('float32')
         for epoch in progress_bar:
-            train_loader, val_loader = get_mnist_data(BATCH_SIZE, BATCH_SIZE)
+            train_loader, val_loader = get_data_loader(BATCH_SIZE, BATCH_SIZE)
             counter = 0
             epoch_start_time = time.time()
             #shuffle(copies)

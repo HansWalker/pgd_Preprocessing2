@@ -37,16 +37,20 @@ batch_size = config['training_batch_size']
 data_root='sar_data/FMNIST'
 img_size = [28,28,1]
 
-def get_fmnist_data(train_batch_size):
+def get_data(train_batch_size):
     
     mnist = datasets.FashionMNIST(root=data_root, train=True, transform=torchvision.transforms.ToTensor(), target_transform=None, download=True).data.float()
     
-    data_transform = Compose([ToTensor(), Normalize((mnist.mean()/255,), (mnist.std()/255,))])
+    data_transform = Compose([ToTensor()])
     
     train_loader = DataLoader(datasets.FashionMNIST(root=data_root, train=True, transform=data_transform, target_transform=None, download=True),
                               batch_size=train_batch_size, shuffle=True)
     
     return train_loader
+def cycle(iterable):
+    while True:
+        for x in iterable:
+            yield x
 global_step = tf.contrib.framework.get_or_create_global_step()
 model = Model()
 
@@ -90,10 +94,10 @@ with tf.Session() as sess:
   summary_writer = tf.summary.FileWriter(model_dir, sess.graph)
   sess.run(tf.global_variables_initializer())
   training_time = 0.0
+  train_loader= get_data(batch_size)
+  trainiter = iter(cycle(train_loader))
   # Main training loop
   for ii in range(max_num_training_steps):
-    train_loader= get_fmnist_data(batch_size)
-    trainiter = iter(train_loader)
     x_batch, y_batch = next(trainiter)
     y_batch=np.array(y_batch,dtype='uint8')
     x_batch=np.array(x_batch,dtype='float32').reshape(batch_size,img_size[0]*img_size[1])

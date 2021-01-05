@@ -24,7 +24,7 @@ from scipy.ndimage.filters import gaussian_filter
 img_size = [28,28,1]
 experiment_name = '/sargan_mnist'
 output_dir = 'outputs'
-trained_model_path = 'trained_models/sargan_mnist28'
+trained_model_path = 'trained_models/sargan_mnist'
 output_path = output_dir+experiment_name
 data_root='sar_data/MNIST'
 NUM_ITERATION = 85
@@ -41,25 +41,17 @@ plt.switch_backend('agg')
 ####
 
 
-def get_mnist_data(train_batch_size, val_batch_size):
+def get_data_loader(train_batch_size, val_batch_size):
     
     mnist = datasets.MNIST(root=data_root, train=True, transform=torchvision.transforms.ToTensor(), target_transform=None, download=True).data.float()
-    #mnist=torch.load(data_root+'/MNIST_data')
-    data_transform = Compose([ Resize((img_size[0], img_size[1])),ToTensor(), Normalize((mnist.mean()/255,), (mnist.std()/255,))])
+    data_transform = Compose([ToTensor()])
     
     train_loader = DataLoader(datasets.MNIST(root=data_root, train=True, transform=data_transform, target_transform=None, download=True),
                               batch_size=train_batch_size, shuffle=True)
     
     
-    #train_data=(datasets.MNIST(root=data_root, train=True, transform=data_transform, target_transform=None, download=True))
-    #train_loader = DataLoader(torch.load(data_root+'/MNIST_train'),batch_size=train_batch_size, shuffle=True)
-
     val_loader = DataLoader(datasets.MNIST(root=data_root, train=False, transform=data_transform, target_transform=None, download=True),
                             batch_size=val_batch_size, shuffle=False)
-    
-    
-    #val_data=datasets.MNIST(root=data_root, train=False, transform=data_transform, target_transform=None, download=True)
-    #val_loader=DataLoader(torch.load(data_root+'/MNIST_val'),batch_size=val_batch_size, shuffle=False)
     
     return train_loader, val_loader
 
@@ -92,7 +84,7 @@ def main(args):
         #copies = imgs.astype('float32')
         #test_copies = test_imgs.astype('float32')
         for epoch in progress_bar:
-            train_loader, val_loader = get_mnist_data(BATCH_SIZE, BATCH_SIZE)
+            train_loader, val_loader = get_data_loader(BATCH_SIZE, BATCH_SIZE)
             counter = 0
             epoch_start_time = time.time()
             #shuffle(copies)
