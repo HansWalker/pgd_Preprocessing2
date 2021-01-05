@@ -12,8 +12,8 @@
   "training_batch_size": 50,
 
   "_comment": "===== EVAL CONFIGURATION =====",
-  "num_eval_examples": 10000,
-  "eval_batch_size": 200,
+  "num_eval_examples": 8000,
+  "eval_batch_size": 64,
   "eval_on_cpu": true,
 
   "_comment": "=====ADVERSARIAL EXAMPLES CONFIGURATION=====",
