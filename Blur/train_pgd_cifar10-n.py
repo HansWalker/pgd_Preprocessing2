@@ -17,9 +17,10 @@ from torchvision.transforms import Compose, ToTensor, Normalize, Resize
 import torchvision
 from torch.utils.data import DataLoader
 
-from pgd.fmnist.model import Model
-from pgd.fmnist.pgd_attack import LinfPGDAttack
+from pgd.cifar10.model import Model
+from pgd.cifar10.pgd_attack import LinfPGDAttack
 
+from PIL import Image
 with open('pgd/cifar10/config_cifar10.json') as config_file:
     config = json.load(config_file)
 
@@ -35,16 +36,21 @@ batch_size = config['training_batch_size']
 
 # Setting up the data and the model
 data_root='sar_data/cifar10'
-img_size = [32,32*3,1]
-
+img_size = [28,28,1]
+trained_model_path = 'trained_models/sargan_cifar10'
+data_root='sar_data/cifar10'
+def cycle(iterable):
+    while True:
+        for x in iterable:
+            yield x
 def get_data(train_batch_size):
     
-    mnist = datasets.CIFAR10(root=data_root, train=True, transform=torchvision.transforms.ToTensor(), target_transform=None, download=True).data.float()
-    
-    data_transform = Compose([ToTensor(), Normalize((mnist.mean()/255,), (mnist.std()/255,))])
+    mnist = datasets.CIFAR10(root=data_root, train=True, transform=torchvision.transforms.ToTensor(), target_transform=None, download=True)#.data.float()
+    data_transform = Compose([Resize((img_size[0], img_size[1])),ToTensor()])
     
     train_loader = DataLoader(datasets.CIFAR10(root=data_root, train=True, transform=data_transform, target_transform=None, download=True),
                               batch_size=train_batch_size, shuffle=True)
+    
     
     return train_loader
 global_step = tf.contrib.framework.get_or_create_global_step()
@@ -86,17 +92,22 @@ shutil.copy('pgd/cifar10/config_cifar10.json', model_dir)
 
 with tf.Session() as sess:
   # Initialize the summary writer, global variables, and our time counter.
+  #saver.restore(sess,tf.train.latest_checkpoint(model_dir))
   summary_writer = tf.summary.FileWriter(model_dir, sess.graph)
   sess.run(tf.global_variables_initializer())
   training_time = 0.0
+  train_loader= get_data(batch_size)
+  trainiter = iter(cycle(train_loader))
   # Main training loop
   for ii in range(max_num_training_steps):
-    train_loader= get_data(batch_size)
-    trainiter = iter(train_loader)
-    x_batch, y_batch = next(trainiter)
+    x_batch2, y_batch = next(trainiter)
     y_batch=np.array(y_batch,dtype='uint8')
-    x_batch=np.array(x_batch,dtype='float32').reshape(batch_size,img_size[0]*img_size[1])
-    #x_batch = x_batch.data.numpy().transpose(0,2,3,1)
+    x_batch2 = np.array(x_batch2.data.numpy().transpose(0,2,3,1))*255
+    x_batch=np.zeros([batch_size,img_size[0]*img_size[1]])
+    for i in range(batch_size):
+        nextimage=Image.fromarray((x_batch2[i]).astype(np.uint8))
+        nextimage=nextimage.convert('L')
+        x_batch[i]=np.array(nextimage,dtype='float32').reshape([img_size[0]*img_size[1]])/255
 
     # Compute Adversarial Perturbations
     start = timer()

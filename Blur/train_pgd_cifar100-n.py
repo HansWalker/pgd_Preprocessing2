@@ -17,11 +17,11 @@ from torchvision.transforms import Compose, ToTensor, Normalize, Resize
 import torchvision
 from torch.utils.data import DataLoader
 
-from pgd.cifar10.model import Model
-from pgd.cifar10.pgd_attack import LinfPGDAttack
+from pgd.cifar100.model import Model
+from pgd.cifar100.pgd_attack import LinfPGDAttack
 
 from PIL import Image
-with open('pgd/cifar10/config_cifar10.json') as config_file:
+with open('pgd/cifar100/config_cifar100.json') as config_file:
     config = json.load(config_file)
 
 # Setting up training parameters
@@ -35,20 +35,20 @@ num_checkpoint_steps = config['num_checkpoint_steps']
 batch_size = config['training_batch_size']
 
 # Setting up the data and the model
-data_root='sar_data/cifar10'
+data_root='sar_data/cifar100'
 img_size = [28,28,1]
-trained_model_path = 'trained_models/sargan_cifar10'
-data_root='sar_data/cifar10'
+trained_model_path = 'trained_models/sargan_cifar100'
+data_root='sar_data/cifar100'
 def cycle(iterable):
     while True:
         for x in iterable:
             yield x
 def get_data(train_batch_size):
     
-    mnist = datasets.CIFAR10(root=data_root, train=True, transform=torchvision.transforms.ToTensor(), target_transform=None, download=True)#.data.float()
+    mnist = datasets.CIFAR100(root=data_root, train=True, transform=torchvision.transforms.ToTensor(), target_transform=None, download=True)#.data.float()
     data_transform = Compose([Resize((img_size[0], img_size[1])),ToTensor()])
     
-    train_loader = DataLoader(datasets.CIFAR10(root=data_root, train=True, transform=data_transform, target_transform=None, download=True),
+    train_loader = DataLoader(datasets.CIFAR100(root=data_root, train=True, transform=data_transform, target_transform=None, download=True),
                               batch_size=train_batch_size, shuffle=True)
     
     
@@ -69,7 +69,7 @@ attack = LinfPGDAttack(model,
                        config['loss_func'])
 
 # Setting up the Tensorboard and checkpoint outputs
-model_dir = config['model_dir']
+model_dir = config['model_dir-n']
 if not os.path.exists(model_dir):
   os.makedirs(model_dir)
 
@@ -87,7 +87,7 @@ tf.summary.scalar('xent adv', model.xent / batch_size)
 tf.summary.image('images adv train', model.x_image)
 merged_summaries = tf.summary.merge_all()
 
-shutil.copy('pgd/cifar10/config_cifar10.json', model_dir)
+shutil.copy('pgd/cifar100/config_cifar100.json', model_dir)
 
 
 with tf.Session() as sess:
@@ -111,7 +111,7 @@ with tf.Session() as sess:
 
     # Compute Adversarial Perturbations
     start = timer()
-    x_batch_adv = attack.perturb(x_batch, y_batch, sess)
+    x_batch_adv = x_batch#attack.perturb(x_batch, y_batch, sess)
     end = timer()
     training_time += end - start
 
