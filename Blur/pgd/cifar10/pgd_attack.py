@@ -9,12 +9,8 @@ from __future__ import print_function
 
 import tensorflow as tf
 import numpy as np
-import torchvision
-from torch.utils.data import DataLoader
-from torchvision import transforms, datasets, models
-from torchvision.transforms import Compose, ToTensor, Normalize, Resize
-data_root='sar_data/FMNIST'
-img_size = [28,28,1]
+
+
 class LinfPGDAttack:
   def __init__(self, model, epsilon, k, a, random_start, loss_func):
     """Attack parameter initialization. The attack performs k steps of
@@ -63,16 +59,7 @@ class LinfPGDAttack:
       x = np.clip(x, 0, 1) # ensure valid pixel range
 
     return x
-def get_data(train_batch_size):
-    
-    mnist = datasets.FashionMNIST(root=data_root, train=True, transform=torchvision.transforms.ToTensor(), target_transform=None, download=True).data.float()
-    
-    data_transform = Compose([ToTensor(), Normalize((mnist.mean()/255,), (mnist.std()/255,))])
-    
-    train_loader = DataLoader(datasets.FashionMNIST(root=data_root, train=True, transform=data_transform, target_transform=None, download=True),
-                              batch_size=train_batch_size, shuffle=True)
-    
-    return train_loader
+
 
 if __name__ == '__main__':
   import json
@@ -83,10 +70,8 @@ if __name__ == '__main__':
 
   from model import Model
 
-  with open('config_fmnist.json') as config_file:
+  with open('config.json') as config_file:
     config = json.load(config_file)
-    num_eval_examples = config['num_eval_examples']
-    eval_batch_size = config['eval_batch_size']
 
   model_file = tf.train.latest_checkpoint(config['model_dir'])
   if model_file is None:
@@ -101,15 +86,16 @@ if __name__ == '__main__':
                          config['random_start'],
                          config['loss_func'])
   saver = tf.train.Saver()
-  batch_size=eval_batch_size
-  train_loader= get_data(batch_size)
+
+  mnist = input_data.read_data_sets('MNIST_data', one_hot=False)
 
   with tf.Session() as sess:
-    trainiter = iter(train_loader)
     # Restore the checkpoint
     saver.restore(sess, model_file)
 
     # Iterate over the samples batch-by-batch
+    num_eval_examples = config['num_eval_examples']
+    eval_batch_size = config['eval_batch_size']
     num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
 
     x_adv = [] # adv accumulator
@@ -121,9 +107,8 @@ if __name__ == '__main__':
       bend = min(bstart + eval_batch_size, num_eval_examples)
       print('batch size: {}'.format(bend - bstart))
 
-      x_batch, y_batch = next(trainiter)
-      y_batch=np.array(y_batch,dtype='uint8')
-      x_batch=np.array(x_batch,dtype='float32').reshape(batch_size,img_size[0]*img_size[1])
+      x_batch = mnist.test.images[bstart:bend, :]
+      y_batch = mnist.test.labels[bstart:bend]
 
       x_batch_adv = attack.perturb(x_batch, y_batch, sess)
 
