@@ -20,8 +20,9 @@ import torch
 import torchvision
 from torchvision.transforms import Compose, ToTensor, Normalize, Resize
 from scipy.ndimage.filters import gaussian_filter
+from PIL import Image
 
-img_size = [32,32*3,1]
+img_size = [28,28,1]
 experiment_name = '/sargan_cifar100'
 output_dir = 'outputs'
 trained_model_path = 'trained_models/sargan_cifar100'
@@ -44,7 +45,7 @@ plt.switch_backend('agg')
 def get_data_loader(train_batch_size, val_batch_size):
     
     mnist = datasets.CIFAR100(root=data_root, train=True, transform=torchvision.transforms.ToTensor(), target_transform=None, download=True)#.data.float()
-    data_transform = Compose([ToTensor()])
+    data_transform = Compose([Resize((img_size[0], img_size[1])),ToTensor()])
     
     train_loader = DataLoader(datasets.CIFAR100(root=data_root, train=True, transform=data_transform, target_transform=None, download=True),
                               batch_size=train_batch_size, shuffle=True)
@@ -91,9 +92,15 @@ def main(args):
             for i in range (NUM_ITERATION):
                 #getting a batch from the training data
                 #one_batch_of_imgs = image_batches[i]
-                features, labels = next(trainiter)
-                features = features.data.numpy().transpose(0,2,3,1)
-                features=features.reshape([BATCH_SIZE,img_size[0],img_size[1],img_size[2]])
+                features2, labels = next(trainiter)
+                features2 = features2.data.numpy().transpose(0,2,3,1)*255
+                
+                
+                features=np.zeros([len(features2),img_size[0],img_size[1],1])
+                for i in range(len(features2)):
+                    nextimage=Image.fromarray((features2[i]).astype(np.uint8))
+                    nextimage=nextimage.convert('L')
+                    features[i,:,:,0]=np.array(nextimage,dtype='float32')/255
                 #copy the batch
                 features_copy = features.copy()
                 #corrupt the images
@@ -127,10 +134,15 @@ def main(args):
             sum_psnr = 0
             list_images = []
             for j in range(NUM_TEST_PER_EPOCH):
-                features, labels = next(testiter)
-                features = features.data.numpy()
-                features = features.transpose(0,2,3,1)
-                features =features.reshape([BATCH_SIZE,img_size[0],img_size[1],img_size[2]])
+                features2, labels = next(trainiter)
+                features2 = features2.data.numpy().transpose(0,2,3,1)*255
+                
+                
+                features=np.zeros([len(features2),img_size[0],img_size[1],1])
+                for i in range(len(features2)):
+                    nextimage=Image.fromarray((features2[i]).astype(np.uint8))
+                    nextimage=nextimage.convert('L')
+                    features[i,:,:,0]=np.array(nextimage,dtype='float32')/255
                 batch_copy = features.copy()
                 #corrupt the images
                 corrupted_batch = np.array([add_gaussian_noise(image, sd=np.random.uniform(NOISE_STD_RANGE[0], NOISE_STD_RANGE[1])) for image in batch_copy])
