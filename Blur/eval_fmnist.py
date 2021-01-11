@@ -17,8 +17,8 @@ import time
 import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
 
-from pgd.cifar100.model import Model
-from pgd.cifar100.pgd_attack import LinfPGDAttack
+from pgd.mnist.model import Model
+from pgd.mnist.pgd_attack import LinfPGDAttack
 from torchvision import transforms, datasets, models
 import torchvision
 from torch.utils.data import DataLoader
@@ -29,8 +29,7 @@ from scipy.ndimage.filters import gaussian_filter
 import numpy as np
 from torchvision.transforms import Compose, ToTensor, Normalize, Resize
 import torch
-from PIL import Image
-data_root='sar_data/cifar100'
+data_root='sar_data/FMNIST'
 
 def blur(batch):
     #sargan model
@@ -42,23 +41,18 @@ def blur(batch):
         corruptedbatch[i]=gaussian_filter(np.array([add_gaussian_noise(newbatch[i], sd=np.random.uniform(NOISE_STD_RANGE[0], NOISE_STD_RANGE[1]))]), sigma=2)[0]
     return corruptedbatch
 
-def cycle(iterable):
-    while True:
-        for x in iterable:
-            yield x
 def get_data(train_batch_size):
     
-    mnist = datasets.CIFAR100(root=data_root, train=True, transform=torchvision.transforms.ToTensor(), target_transform=None, download=True)#.data.float()
-    data_transform = Compose([Resize((img_size[0], img_size[1])),ToTensor()])
+    mnist = datasets.FashionMNIST(root=data_root, train=True, transform=torchvision.transforms.ToTensor(), target_transform=None, download=True).data.float()
     
-    train_loader = DataLoader(datasets.CIFAR100(root=data_root, train=True, transform=data_transform, target_transform=None, download=True),
+    data_transform = Compose([ToTensor()])#, Normalize((mnist.mean()/255,), (mnist.std()/255,))])
+    
+    train_loader = DataLoader(datasets.FashionMNIST(root=data_root, train=True, transform=data_transform, target_transform=None, download=True),
                               batch_size=train_batch_size, shuffle=True)
-    
-    
     return train_loader
 global_step = tf.contrib.framework
 # Global constants
-with open('pgd/cifar100/config_cifar100.json') as config_file:
+with open('pgd/fmnist/config_fmnist.json') as config_file:
   config = json.load(config_file)
 num_eval_examples = config['num_eval_examples']
 eval_batch_size = config['eval_batch_size']
@@ -70,7 +64,7 @@ model_dir = config['model_dir']
 
 img_size = [28,28,1]
 img_size2 = (28,28)
-trained_model_path = 'trained_models/sargan_cifar100'
+trained_model_path = 'trained_models/sargan_fmnist'
 BATCH_SIZE = 64
 batch_size2=eval_batch_size
 NOISE_STD_RANGE = [0.1, 0.3]
@@ -143,17 +137,15 @@ def evaluate_checkpoint(filename):
         trainiter = iter(cycle(train_loader))
         for ibatch in range(num_batches):
                 
-            x_batch2, y_batch = next(trainiter)
-            y_batch=np.array(y_batch,dtype='uint8')
-            x_batch2 = np.array(x_batch2.data.numpy().transpose(0,2,3,1))*255
-            x_batch=np.zeros([len(x_batch2),img_size[0]*img_size[1]])
-            for i in range(len(x_batch2)):
-                nextimage=Image.fromarray((x_batch2[i]).astype(np.uint8))
-                nextimage=nextimage.convert('L')
-                x_batch[i]=np.array(nextimage,dtype='float32').reshape([img_size[0]*img_size[1]])/255
+            x_batch, y_batch = next(trainiter)
+            x_batch=np.array(x_batch).reshape([BATCH_SIZE,img_size[0]*img_size[1]])
+            y_batch_list.append(y_batch)
+                
+            
             x_batch_adv = attack.perturb(x_batch, y_batch, sess)
 
-            x_batch_list.append(x_batch_adv)
+            x_batch_list.append(x_batch)            
+            x_corr_list.append(x_batch_adv)
             x_blur_list.append(blur(x_batch))
             x_adv_list.append(blur(x_batch_adv))
       
@@ -172,7 +164,6 @@ def evaluate_checkpoint(filename):
                 blurred_batch=sess2.run(sargan_model.gen_img,feed_dict={sargan_model.image: x_blur_list[ibatch], sargan_model.cond: x_blur_list[ibatch]})
                 blurred_batch=np.array(blurred_batch).reshape([len(blurred_batch),img_size[0]*img_size[1]])
                 x_blur_list[ibatch]=blurred_batch
-                
     with g3.as_default():
         model3 = Model()
         saver2 = tf.train.Saver()

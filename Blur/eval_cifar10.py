@@ -15,7 +15,6 @@ import sys
 import time
 
 import tensorflow as tf
-from tensorflow.examples.tutorials.mnist import input_data
 
 from pgd.cifar10.model import Model
 from pgd.cifar10.pgd_attack import LinfPGDAttack
@@ -70,7 +69,7 @@ model_dir = config['model_dir']
 
 img_size = [28,28,1]
 img_size2 = (28,28)
-trained_model_path = 'trained_models/cifar10'
+trained_model_path = 'trained_models/sargan_cifar10'
 BATCH_SIZE = 64
 batch_size2=eval_batch_size
 NOISE_STD_RANGE = [0.1, 0.3]
@@ -105,10 +104,6 @@ last_checkpoint_filename = ''
 already_seen_state = False
 saver = tf.train.Saver()
 #summary_writer = tf.summary.FileWriter(eval_dir)
-def cycle(iterable):
-    while True:
-        for x in iterable:
-            yield x
 # A function for evaluating a single checkpoint
 # A function for evaluating a single checkpoint
 def evaluate_checkpoint(filename):
@@ -124,12 +119,21 @@ def evaluate_checkpoint(filename):
         num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
         num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
         total_xent_nat = 0.
+        total_xent_corr = 0.
         total_xent_adv = 0.
-        total_corr_nat = 0
-        total_corr_adv = 0        
+        total_xent_blur = 0.
+        
+        total_corr_nat = 0.
+        total_corr_corr = 0.
+        total_corr_adv = 0.
+        total_corr_blur = 0.
+        
         x_batch_list=[]
-        y_batch_list=[]
+        x_corr_list=[]
+        x_blur_list=[]
         x_adv_list=[]
+        y_batch_list=[]
+        
         train_loader= get_data(BATCH_SIZE)
         trainiter = iter(cycle(train_loader))
         for ibatch in range(num_batches):
@@ -143,9 +147,10 @@ def evaluate_checkpoint(filename):
                 nextimage=nextimage.convert('L')
                 x_batch[i]=np.array(nextimage,dtype='float32').reshape([img_size[0]*img_size[1]])/255
             x_batch_adv = attack.perturb(x_batch, y_batch, sess)
+
             x_batch_list.append(x_batch_adv)
-            corruptedbatch =blur(x_batch_adv)
-            x_adv_list.append(corruptedbatch)
+            x_blur_list.append(blur(x_batch))
+            x_adv_list.append(blur(x_batch_adv))
       
       
     with g2.as_default():
@@ -158,6 +163,11 @@ def evaluate_checkpoint(filename):
                 processed_batch=sess2.run(sargan_model.gen_img,feed_dict={sargan_model.image: x_adv_list[ibatch], sargan_model.cond: x_adv_list[ibatch]})
                 processed_batch=np.array(processed_batch).reshape([len(processed_batch),img_size[0]*img_size[1]])
                 x_adv_list[ibatch]=processed_batch
+                
+                blurred_batch=sess2.run(sargan_model.gen_img,feed_dict={sargan_model.image: x_blur_list[ibatch], sargan_model.cond: x_blur_list[ibatch]})
+                blurred_batch=np.array(blurred_batch).reshape([len(blurred_batch),img_size[0]*img_size[1]])
+                x_blur_list[ibatch]=blurred_batch
+                
     with g3.as_default():
         model3 = Model()
         saver2 = tf.train.Saver()
@@ -167,26 +177,54 @@ def evaluate_checkpoint(filename):
                 dict_nat = {model3.x_input: x_batch_list[ibatch],
                         model3.y_input: y_batch_list[ibatch]}
                 
+                dict_corr = {model3.x_input: x_corr_list[ibatch],
+                        model3.y_input: y_batch_list[ibatch]}
+                
                 dict_adv = {model3.x_input: x_adv_list[ibatch],
                           model3.y_input: y_batch_list[ibatch]}
+                
+                dict_blur = {model3.x_input: x_blur_list[ibatch],
+                          model3.y_input: y_batch_list[ibatch]}
+                
+                
         
                 cur_corr_nat, cur_xent_nat = sess3.run(
                                               [model3.num_correct,model3.xent],
                                               feed_dict = dict_nat)
+                
+                cur_corr_corr, cur_xent_corr = sess3.run(
+                                              [model3.num_correct,model3.xent],
+                                              feed_dict = dict_corr)
+                
+                cur_corr_blur, cur_xent_blur = sess3.run(
+                                              [model3.num_correct,model3.xent],
+                                              feed_dict = dict_blur)
+                
                 cur_corr_adv, cur_xent_adv = sess3.run(
                                               [model3.num_correct,model3.xent],
                                               feed_dict = dict_adv)
         
                 total_xent_nat += cur_xent_nat
                 total_xent_adv += cur_xent_adv
+                total_xent_blur += cur_xent_blur
+                total_xent_corr += cur_xent_corr
+                
                 total_corr_nat += cur_corr_nat
                 total_corr_adv += cur_corr_adv
+                total_corr_blur += cur_corr_blur
+                total_corr_corr += cur_corr_corr
             
     
             avg_xent_nat = total_xent_nat / num_eval_examples
             avg_xent_adv = total_xent_adv / num_eval_examples
+            avg_xent_blur = total_xent_blur / num_eval_examples
+            avg_xent_corr = total_xent_corr / num_eval_examples
+            
             acc_nat = total_corr_nat / num_eval_examples
             acc_adv = total_corr_adv / num_eval_examples
+            acc_blur = total_corr_blur / num_eval_examples
+            acc_corr = total_corr_corr / num_eval_examples
+            
             '''summary = tf.Summary(value=[
               tf.Summary.Value(tag='xent adv eval', simple_value= avg_xent_adv),
               tf.Summary.Value(tag='xent adv', simple_value= avg_xent_adv),
@@ -197,8 +235,13 @@ def evaluate_checkpoint(filename):
             summary_writer.add_summary(summary, global_step.eval(sess3))'''
     #sys.stdout = sys.__stdout__
     print('natural: {:.2f}%'.format(100 * acc_nat))
+    print('Corrupted: {:.2f}%'.format(100 * acc_corr))
+    print('natural with blur: {:.2f}%'.format(100 * acc_blur))
     print('adversarial: {:.2f}%'.format(100 * acc_adv))
+    
     print('avg nat loss: {:.4f}'.format(avg_xent_nat))
+    print('avg corr loss: {:.4f}'.format(avg_xent_corr))
+    print('avg nat with blur loss: {:.4f}'.format(avg_xent_blur))
     print('avg adv loss: {:.4f}'.format(avg_xent_adv))
 
 # Infinite eval loop

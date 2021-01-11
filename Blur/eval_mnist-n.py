@@ -30,7 +30,11 @@ import numpy as np
 from torchvision.transforms import Compose, ToTensor, Normalize, Resize
 import torch
 data_root='sar_data/MNIST'
-
+def cycle(iterable):
+    while True:
+        for x in iterable:
+            yield x
+            
 def blur(batch):
     #sargan model
     #reshaping the images to a square
@@ -114,20 +118,24 @@ def evaluate_checkpoint(filename):
         num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
         num_batches = int(math.ceil(num_eval_examples / eval_batch_size))
         total_xent_nat = 0.
+        total_xent_corr = 0.
         total_xent_adv = 0.
         total_xent_blur = 0.
         
         total_corr_nat = 0.
+        total_corr_corr = 0.
         total_corr_adv = 0.
         total_corr_blur = 0.
         
         x_batch_list=[]
+        x_corr_list=[]
         x_blur_list=[]
-        y_batch_list=[]
         x_adv_list=[]
+        y_batch_list=[]
+        
+        train_loader= get_data(BATCH_SIZE)
+        trainiter = iter(cycle(train_loader))
         for ibatch in range(num_batches):
-            train_loader= get_data(BATCH_SIZE)
-            trainiter = iter(train_loader)
                 
             x_batch, y_batch = next(trainiter)
             x_batch=np.array(x_batch).reshape([BATCH_SIZE,img_size[0]*img_size[1]])
@@ -136,7 +144,8 @@ def evaluate_checkpoint(filename):
             
             x_batch_adv = attack.perturb(x_batch, y_batch, sess)
 
-            x_batch_list.append(x_batch_adv)
+            x_batch_list.append(x_batch)            
+            x_corr_list.append(x_batch_adv)
             x_blur_list.append(blur(x_batch))
             x_adv_list.append(blur(x_batch_adv))
       
@@ -164,15 +173,24 @@ def evaluate_checkpoint(filename):
                 dict_nat = {model3.x_input: x_batch_list[ibatch],
                         model3.y_input: y_batch_list[ibatch]}
                 
+                dict_corr = {model3.x_input: x_corr_list[ibatch],
+                        model3.y_input: y_batch_list[ibatch]}
+                
                 dict_adv = {model3.x_input: x_adv_list[ibatch],
                           model3.y_input: y_batch_list[ibatch]}
                 
                 dict_blur = {model3.x_input: x_blur_list[ibatch],
                           model3.y_input: y_batch_list[ibatch]}
+                
+                
         
                 cur_corr_nat, cur_xent_nat = sess3.run(
                                               [model3.num_correct,model3.xent],
                                               feed_dict = dict_nat)
+                
+                cur_corr_corr, cur_xent_corr = sess3.run(
+                                              [model3.num_correct,model3.xent],
+                                              feed_dict = dict_corr)
                 
                 cur_corr_blur, cur_xent_blur = sess3.run(
                                               [model3.num_correct,model3.xent],
@@ -185,18 +203,24 @@ def evaluate_checkpoint(filename):
                 total_xent_nat += cur_xent_nat
                 total_xent_adv += cur_xent_adv
                 total_xent_blur += cur_xent_blur
+                total_xent_corr += cur_xent_corr
                 
                 total_corr_nat += cur_corr_nat
                 total_corr_adv += cur_corr_adv
                 total_corr_blur += cur_corr_blur
+                total_corr_corr += cur_corr_corr
             
     
             avg_xent_nat = total_xent_nat / num_eval_examples
             avg_xent_adv = total_xent_adv / num_eval_examples
             avg_xent_blur = total_xent_blur / num_eval_examples
+            avg_xent_corr = total_xent_corr / num_eval_examples
+            
             acc_nat = total_corr_nat / num_eval_examples
             acc_adv = total_corr_adv / num_eval_examples
             acc_blur = total_corr_blur / num_eval_examples
+            acc_corr = total_corr_corr / num_eval_examples
+            
             '''summary = tf.Summary(value=[
               tf.Summary.Value(tag='xent adv eval', simple_value= avg_xent_adv),
               tf.Summary.Value(tag='xent adv', simple_value= avg_xent_adv),
@@ -207,9 +231,12 @@ def evaluate_checkpoint(filename):
             summary_writer.add_summary(summary, global_step.eval(sess3))'''
     #sys.stdout = sys.__stdout__
     print('natural: {:.2f}%'.format(100 * acc_nat))
+    print('Corrupted: {:.2f}%'.format(100 * acc_corr))
     print('natural with blur: {:.2f}%'.format(100 * acc_blur))
     print('adversarial: {:.2f}%'.format(100 * acc_adv))
+    
     print('avg nat loss: {:.4f}'.format(avg_xent_nat))
+    print('avg corr loss: {:.4f}'.format(avg_xent_corr))
     print('avg nat with blur loss: {:.4f}'.format(avg_xent_blur))
     print('avg adv loss: {:.4f}'.format(avg_xent_adv))
 
