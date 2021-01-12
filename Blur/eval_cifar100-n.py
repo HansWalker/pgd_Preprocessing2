@@ -144,7 +144,7 @@ def evaluate_checkpoint(filename):
         for ibatch in range(num_batches):
                 
             x_batch2, y_batch = next(trainiter)
-            y_batch=np.array(y_batch,dtype='uint8')
+            y_batch_list.append(y_batch)
             x_batch2 = np.array(x_batch2.data.numpy().transpose(0,2,3,1))*255
             x_batch=np.zeros([len(x_batch2),img_size[0]*img_size[1]])
             for i in range(len(x_batch2)):
@@ -153,7 +153,8 @@ def evaluate_checkpoint(filename):
                 x_batch[i]=np.array(nextimage,dtype='float32').reshape([img_size[0]*img_size[1]])/255
             x_batch_adv = attack.perturb(x_batch, y_batch, sess)
 
-            x_batch_list.append(x_batch_adv)
+            x_batch_list.append(x_batch)
+            x_corr_list.append(x_batch_adv)
             x_blur_list.append(blur(x_batch))
             x_adv_list.append(blur(x_batch_adv))
       

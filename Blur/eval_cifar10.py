@@ -140,6 +140,7 @@ def evaluate_checkpoint(filename):
                 
             x_batch2, y_batch = next(trainiter)
             y_batch=np.array(y_batch,dtype='uint8')
+            y_batch_list.append(y_batch)
             x_batch2 = np.array(x_batch2.data.numpy().transpose(0,2,3,1))*255
             x_batch=np.zeros([len(x_batch2),img_size[0]*img_size[1]])
             for i in range(len(x_batch2)):

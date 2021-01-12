@@ -57,7 +57,7 @@ global_step = tf.contrib.framework.get_or_create_global_step()
 model = Model()
 
 # Setting up the optimizer
-train_step = tf.train.AdamOptimizer(1e-4).minimize(model.xent,
+train_step = tf.train.AdamOptimizer(1e-5).minimize(model.xent,
                                                    global_step=global_step)
 
 # Set up adversary
@@ -101,7 +101,6 @@ with tf.Session() as sess:
   # Main training loop
   for ii in range(max_num_training_steps):
     x_batch2, y_batch = next(trainiter)
-    y_batch=np.array(y_batch,dtype='uint8')
     x_batch2 = np.array(x_batch2.data.numpy().transpose(0,2,3,1))*255
     x_batch=np.zeros([batch_size,img_size[0]*img_size[1]])
     for i in range(batch_size):
