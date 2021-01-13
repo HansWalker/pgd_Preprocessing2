@@ -17,7 +17,7 @@
   "eval_on_cpu": true,
 
   "_comment": "=====ADVERSARIAL EXAMPLES CONFIGURATION=====",
-  "epsilon": 0.05,
+  "epsilon": 0.01,
   "k": 40,
   "a": 0.01,
   "random_start": true,
