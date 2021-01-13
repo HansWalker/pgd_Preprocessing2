@@ -57,16 +57,21 @@ global_step = tf.contrib.framework.get_or_create_global_step()
 model = Model()
 
 # Setting up the optimizer
-train_step = tf.train.AdamOptimizer(1e-5).minimize(model.xent,
+train_step = tf.train.AdamOptimizer(1e-4).minimize(model.xent,
                                                    global_step=global_step)
 
 # Set up adversary
-attack = LinfPGDAttack(model, 
-                       config['epsilon'],
+attacks=[]
+epsilon=0
+attacknum=0
+for i in range(11):
+    attacks.append(LinfPGDAttack(model, 
+                       epsilon,
                        config['k'],
                        config['a'],
                        config['random_start'],
-                       config['loss_func'])
+                       config['loss_func']))
+    epsilon+=.005
 
 # Setting up the Tensorboard and checkpoint outputs
 model_dir = config['model_dir']
@@ -110,7 +115,7 @@ with tf.Session() as sess:
 
     # Compute Adversarial Perturbations
     start = timer()
-    x_batch_adv = attack.perturb(x_batch, y_batch, sess)
+    x_batch_adv = attacks[attacknum].perturb(x_batch, y_batch, sess)
     end = timer()
     training_time += end - start
 
@@ -124,6 +129,8 @@ with tf.Session() as sess:
     if ii % num_output_steps == 0:
       nat_acc = sess.run(model.accuracy, feed_dict=nat_dict)
       adv_acc = sess.run(model.accuracy, feed_dict=adv_dict)
+      if(adv_acc>.2 and attacknum<10):
+          attacknum+=1
       print('Step {}:    ({})'.format(ii, datetime.now()))
       print('    training nat accuracy {:.4}%'.format(nat_acc * 100))
       print('    training adv accuracy {:.4}%'.format(adv_acc * 100))
